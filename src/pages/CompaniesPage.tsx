@@ -186,8 +186,8 @@ export const CompaniesPage: React.FC = () => {
                   )}
 
                   {/* Teks di sebelah kanan sejajar sempurna */}
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-base sm:text-xl font-black text-slate-900 tracking-wide uppercase leading-tight">
+                  <div className="min-w-0 flex-1 font-serif">
+                    <h3 className="text-base sm:text-xl font-bold text-slate-900 tracking-wide uppercase leading-tight">
                       {comp.name || 'NAMA PERUSAHAAN'}
                     </h3>
                     <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">

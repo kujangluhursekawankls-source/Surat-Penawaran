@@ -39,17 +39,17 @@ export async function generateQuotationPdf(
   const npwpStr = company.npwp ? `NPWP: ${company.npwp}` : '';
 
   // Hitung baris teks dan kalkulasi tinggi total teks secara presisi
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9.5);
 
-  // Batasi lebar baris agar tidak bertabrakan dengan logo di kiri (lebar aman 130mm di tengah halaman)
+  // Batasi lebar baris agar tidak bertabrakan dengan logo di kiri (lebar aman 136mm di tengah halaman)
   const maxCenterTextWidth = 136;
   const addressLines: string[] = addressStr ? doc.splitTextToSize(addressStr, maxCenterTextWidth) : [];
 
   // Hitung posisi Y tiap elemen teks
-  const nameFontSize = 18; // Heading perusahaan lebih besar, tegas, dan proporsional (sesuai standar kop resmi)
+  const nameFontSize = 17.5; // Heading formal berwibawa khas kop surat resmi (Times Bold)
   const nameLineHeight = 7.0; // mm
-  const normalLineHeight = 3.8; // mm
+  const normalLineHeight = 4.2; // mm
 
   let textBottomY = kopTopY + nameLineHeight;
   if (addressLines.length > 0) {
@@ -80,19 +80,19 @@ export async function generateQuotationPdf(
     }
   }
 
-  // TULIS TEKS KOP SURAT SECARA RATA TENGAH (CENTER ALIGNED)
-  let currentTextY = kopTopY + 5.2;
+  // TULIS TEKS KOP SURAT SECARA RATA TENGAH (CENTER ALIGNED) - FONT RESMI TIMES NEW ROMAN
+  let currentTextY = kopTopY + 5.5;
 
-  // Nama Perusahaan (Tebal, Navy, Rata Tengah, Heading Besar & Elegan)
-  doc.setFont('helvetica', 'bold');
+  // Nama Perusahaan (Times Bold, Navy Resmi, Rata Tengah)
+  doc.setFont('times', 'bold');
   doc.setFontSize(nameFontSize);
   doc.setTextColor(20, 35, 75); // Royal Navy
   doc.text(companyName, centerX, currentTextY, { align: 'center' });
 
-  // Alamat Lengkap (Rata Tengah)
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(55, 65, 81);
+  // Alamat Lengkap (Times Normal, Rata Tengah)
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(51, 65, 85);
 
   if (addressLines.length > 0) {
     currentTextY += normalLineHeight + 1.2;
@@ -132,8 +132,8 @@ export async function generateQuotationPdf(
   const city = company.city || '';
 
   // Tanggal & Tempat di sisi kanan atas
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10);
   doc.setTextColor(30, 41, 59);
   const placeDate = city ? `${city}, ${dateFormatted}` : dateFormatted;
   doc.text(placeDate, pageWidth - marginRight, currentY, { align: 'right' });
@@ -158,20 +158,20 @@ export async function generateQuotationPdf(
   }
 
   doc.text('Perihal', metaLabelX, currentY);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('times', 'bold');
   doc.text(`:  ${quotation.subject || 'Surat Penawaran Harga'}`, metaValX, currentY);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('times', 'normal');
   currentY += 7;
 
   // Tujuan Surat (Kepada Yth)
   doc.text('Kepada Yth.', marginLeft, currentY);
   currentY += 4.5;
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('times', 'bold');
   doc.text(quotation.customerCompany || quotation.toRecipient || 'Pimpinan / Management', marginLeft, currentY);
   currentY += 4.5;
 
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('times', 'normal');
   if (quotation.customerPic) {
     doc.text(`Up. Bapak / Ibu ${quotation.customerPic}`, marginLeft, currentY);
     currentY += 4.5;
@@ -180,7 +180,7 @@ export async function generateQuotationPdf(
   if (quotation.customerAddress) {
     const addrLines = doc.splitTextToSize(quotation.customerAddress, 110);
     doc.text(addrLines, marginLeft, currentY);
-    currentY += addrLines.length * 4;
+    currentY += addrLines.length * 4.2;
   }
   currentY += 3;
 
@@ -190,10 +190,10 @@ export async function generateQuotationPdf(
     'Dengan hormat,\nBersama surat ini kami mengajukan penawaran pekerjaan sesuai kebutuhan yang Bapak/Ibu sampaikan. Adapun rincian penawaran kami sebagai berikut:';
 
   const openingLines = doc.splitTextToSize(openingText, contentWidth);
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setTextColor(30, 41, 59);
   doc.text(openingLines, marginLeft, currentY);
-  currentY += openingLines.length * 4.2 + 3;
+  currentY += openingLines.length * 4.4 + 3;
 
   // --- 4. TABEL PENAWARAN ---
   const tableData = quotation.items.map((item, idx) => [
@@ -212,17 +212,22 @@ export async function generateQuotationPdf(
     head: [['No', 'Deskripsi Pekerjaan', 'Dimensi / Spesifikasi', 'Qty', 'Satuan', 'Harga (Rp)', 'Total (Rp)']],
     body: tableData,
     theme: 'grid',
+    styles: {
+      font: 'times',
+    },
     headStyles: {
+      font: 'times',
       fillColor: [30, 64, 175], // Royal Navy Blue (#1e40af)
       textColor: [255, 255, 255],
-      fontSize: 8.5,
+      fontSize: 9,
       fontStyle: 'bold',
       halign: 'center',
       valign: 'middle',
       cellPadding: 2.5,
     },
     bodyStyles: {
-      fontSize: 8,
+      font: 'times',
+      fontSize: 8.5,
       cellPadding: 2.2,
       textColor: [30, 41, 59],
     },
@@ -254,10 +259,10 @@ export async function generateQuotationPdf(
   const summaryBoxWidth = 85;
   const summaryX = pageWidth - marginRight - summaryBoxWidth;
 
-  doc.setFontSize(8.5);
+  doc.setFontSize(9);
 
   // Subtotal
-  doc.setFont('helvetica', 'normal');
+  doc.setFont('times', 'normal');
   doc.text('Subtotal', summaryX, currentY);
   doc.text(formatRupiah(quotation.subtotal), pageWidth - marginRight, currentY, { align: 'right' });
   currentY += 4.5;
@@ -286,8 +291,8 @@ export async function generateQuotationPdf(
   doc.setLineWidth(0.5);
   doc.roundedRect(summaryX - 2, currentY - 3.5, summaryBoxWidth + 2, 7.5, 1.5, 1.5, 'FD');
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10);
   doc.setTextColor(30, 64, 175);
   doc.text('GRAND TOTAL', summaryX, currentY + 1.2);
   doc.text(formatRupiah(quotation.grandTotal), pageWidth - marginRight, currentY + 1.2, { align: 'right' });
@@ -300,12 +305,12 @@ export async function generateQuotationPdf(
   doc.setLineWidth(0.4);
   doc.roundedRect(marginLeft, currentY, contentWidth, 8, 1.5, 1.5, 'FD');
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFont('times', 'bold');
+  doc.setFontSize(9);
   doc.setTextColor(71, 85, 105);
   doc.text('Terbilang :', marginLeft + 3, currentY + 5.2);
 
-  doc.setFont('helvetica', 'bolditalic');
+  doc.setFont('times', 'bolditalic');
   doc.setTextColor(30, 64, 175);
   doc.text(`"${quotation.terbilang || 'Nol Rupiah'}"`, marginLeft + 23, currentY + 5.2);
 
@@ -317,11 +322,11 @@ export async function generateQuotationPdf(
     'Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih.';
 
   const closingLines = doc.splitTextToSize(closingText, contentWidth);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9.5);
   doc.setTextColor(30, 41, 59);
   doc.text(closingLines, marginLeft, currentY);
-  currentY += closingLines.length * 4.2 + 5;
+  currentY += closingLines.length * 4.4 + 5;
 
   // Cek overflow sebelum tanda tangan
   if (currentY > pageHeight - 65) {
@@ -334,13 +339,14 @@ export async function generateQuotationPdf(
   const signX = pageWidth - marginRight - signWidth;
   let signY = currentY;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9.5);
   doc.setTextColor(30, 41, 59);
   doc.text('Hormat Kami,', signX, signY, { align: 'left' });
-  signY += 4.5;
+  signY += 5;
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont('times', 'bold');
+  doc.setFontSize(10);
   doc.text((company.name || '').toUpperCase(), signX, signY, { align: 'left' });
   signY += 4.5;
 
@@ -371,7 +377,8 @@ export async function generateQuotationPdf(
   const directorTitle = company.directorTitle || 'Direktur';
 
   if (directorName) {
-    doc.setFont('helvetica', 'bold');
+    doc.setFont('times', 'bold');
+    doc.setFontSize(10);
     doc.setTextColor(20, 35, 75);
     doc.text(directorName, signX, signY);
 
@@ -383,8 +390,8 @@ export async function generateQuotationPdf(
     signY += 4.5;
   }
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9);
   doc.setTextColor(71, 85, 105);
   doc.text(directorTitle, signX, signY);
   signY += 6; // Jarak setelah tanda tangan selesai
@@ -394,10 +401,10 @@ export async function generateQuotationPdf(
     let notesY = Math.max(currentY + 36, signY) + 2;
 
     const notesWidth = contentWidth; // Lebar proporsional di sisi kiri dokumen
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(8.5);
     const noteLines = doc.splitTextToSize(quotation.additionalNotes.trim(), notesWidth - 8);
-    const boxHeight = noteLines.length * 3.6 + 9;
+    const boxHeight = noteLines.length * 3.8 + 9;
 
     // Cek overflow jika butuh halaman baru
     if (notesY + boxHeight > pageHeight - 15) {
@@ -412,14 +419,14 @@ export async function generateQuotationPdf(
     doc.roundedRect(marginLeft, notesY, notesWidth, boxHeight, 1.5, 1.5, 'FD');
 
     // Judul Catatan / Pembayaran
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.8);
+    doc.setFont('times', 'bold');
+    doc.setFontSize(8.5);
     doc.setTextColor(30, 41, 59); // slate-800
     doc.text('Catatan / Syarat Pembayaran :', marginLeft + 3.5, notesY + 4.5);
 
     // Isi Catatan / Nomor Rekening
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(8.2);
     doc.setTextColor(51, 65, 85); // slate-700
     doc.text(noteLines, marginLeft + 3.5, notesY + 8.5);
   }
@@ -434,7 +441,7 @@ export async function generateQuotationPdf(
     // Watermark jika status khusus
     if (quotation.status === 'draft') {
       doc.saveGraphicsState();
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.setFontSize(48);
       doc.setTextColor(226, 232, 240);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -445,7 +452,7 @@ export async function generateQuotationPdf(
       doc.restoreGraphicsState();
     } else if (quotation.status === 'revisi') {
       doc.saveGraphicsState();
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('times', 'bold');
       doc.setFontSize(46);
       doc.setTextColor(254, 226, 226);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -462,8 +469,8 @@ export async function generateQuotationPdf(
     doc.line(marginLeft, pageHeight - 12, pageWidth - marginRight, pageHeight - 12);
 
     // Teks Footer
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
 
     const docRef = `${quotation.quotationNumber}  •  Dicetak: ${todayFormatted}`;
