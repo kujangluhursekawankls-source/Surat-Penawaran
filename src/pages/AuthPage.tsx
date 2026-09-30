@@ -28,8 +28,14 @@ export const AuthPage: React.FC = () => {
       await loginWithGoogle();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal login dengan Google.';
-      if (msg.includes('auth/popup-closed-by-user')) {
-        setError('Jendela popup login Google ditutup sebelum selesai.');
+      if (msg.includes('auth/unauthorized-domain')) {
+        setError(
+          `Domain "${window.location.hostname}" belum diizinkan di Firebase. Silakan tambahkan domain ini di Firebase Console -> Authentication -> Settings -> Authorized Domains.`
+        );
+      } else if (msg.includes('auth/popup-closed-by-user') || msg.includes('popup_closed_by_user')) {
+        setError('Jendela popup login Google tertutup sebelum selesai. Pastikan browser tidak memblokir popup.');
+      } else if (msg.includes('auth/popup-blocked')) {
+        setError('Popup diblokir oleh browser. Silakan izinkan pop-up untuk situs ini.');
       } else {
         setError(msg);
       }
