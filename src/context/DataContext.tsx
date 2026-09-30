@@ -40,7 +40,7 @@ interface FirestoreErrorInfo {
   };
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): FirestoreErrorInfo {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -52,8 +52,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  if (errInfo.error.toLowerCase().includes('permission') || errInfo.error.toLowerCase().includes('insufficient')) {
+    console.warn('Firestore Permission notice (waiting for Rules publish):', JSON.stringify(errInfo));
+  } else {
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+  }
+  return errInfo;
 }
 
 interface DataContextType {
@@ -63,6 +67,8 @@ interface DataContextType {
   templates: QuotationTemplate[];
   settings: UserSettings | null;
   loading: boolean;
+  rulesPermissionError: boolean;
+  dismissRulesError: () => void;
   // Companies
   saveCompany: (company: Partial<CompanyProfile>) => Promise<string>;
   deleteCompany: (id: string) => Promise<void>;
@@ -95,6 +101,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rulesPermissionError, setRulesPermissionError] = useState(false);
 
   // Real-time synchronization with Firestore (STRICT USER OWNERSHIP - NO SAMPLE DUMMY DATA)
   useEffect(() => {
@@ -105,11 +112,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTemplates([]);
       setSettings(null);
       setLoading(false);
+      setRulesPermissionError(false);
       return;
     }
 
     setLoading(true);
     const userId = user.uid;
+
+    // Instant local cache load for zero-latency offline resilience
+    try {
+      const cComp = localStorage.getItem('sp_companies_' + userId);
+      if (cComp) setCompanies(JSON.parse(cComp));
+      const cCust = localStorage.getItem('sp_customers_' + userId);
+      if (cCust) setCustomers(JSON.parse(cCust));
+      const cQuot = localStorage.getItem('sp_quotations_' + userId);
+      if (cQuot) setQuotations(JSON.parse(cQuot));
+      const cTmpl = localStorage.getItem('sp_templates_' + userId);
+      if (cTmpl) setTemplates(JSON.parse(cTmpl));
+      const cSett = localStorage.getItem('sp_settings_' + userId);
+      if (cSett) setSettings(JSON.parse(cSett));
+    } catch {
+      // ignore
+    }
+
+    const onListenerError = (err: unknown, op: OperationType, path: string) => {
+      const info = handleFirestoreError(err, op, path);
+      if (info.error.toLowerCase().includes('permission') || info.error.toLowerCase().includes('insufficient')) {
+        setRulesPermissionError(true);
+      }
+      setLoading(false);
+    };
 
     // 1. Companies / Profil Kop Surat (Hanya milik user yang sedang login)
     const compQ = query(collection(db, 'companies'), where('userId', '==', userId));
@@ -119,8 +151,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const list: CompanyProfile[] = [];
         snap.forEach((d) => list.push(d.data() as CompanyProfile));
         setCompanies(list);
+        try { localStorage.setItem('sp_companies_' + userId, JSON.stringify(list)); } catch {}
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'companies')
+      (err) => onListenerError(err, OperationType.LIST, 'companies')
     );
 
     // 2. Customers / Pelanggan (Hanya milik user yang sedang login)
@@ -131,8 +164,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const list: Customer[] = [];
         snap.forEach((d) => list.push(d.data() as Customer));
         setCustomers(list);
+        try { localStorage.setItem('sp_customers_' + userId, JSON.stringify(list)); } catch {}
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'customers')
+      (err) => onListenerError(err, OperationType.LIST, 'customers')
     );
 
     // 3. Quotations / Surat Penawaran (Hanya milik user yang sedang login)
@@ -144,9 +178,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         snap.forEach((d) => list.push(d.data() as Quotation));
         list.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
         setQuotations(list);
+        try { localStorage.setItem('sp_quotations_' + userId, JSON.stringify(list)); } catch {}
         setLoading(false);
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'quotations')
+      (err) => onListenerError(err, OperationType.LIST, 'quotations')
     );
 
     // 4. Templates
@@ -157,8 +192,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const list: QuotationTemplate[] = [];
         snap.forEach((d) => list.push(d.data() as QuotationTemplate));
         setTemplates(list);
+        try { localStorage.setItem('sp_templates_' + userId, JSON.stringify(list)); } catch {}
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'templates')
+      (err) => onListenerError(err, OperationType.LIST, 'templates')
     );
 
     // 5. Settings (Format penomoran surat user)
@@ -166,7 +202,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       doc(db, 'settings', userId),
       (snap) => {
         if (snap.exists()) {
-          setSettings(snap.data() as UserSettings);
+          const s = snap.data() as UserSettings;
+          setSettings(s);
+          try { localStorage.setItem('sp_settings_' + userId, JSON.stringify(s)); } catch {}
         } else {
           const initSettings: UserSettings = {
             userId,
@@ -177,7 +215,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSettings(initSettings);
         }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, `settings/${userId}`)
+      (err) => onListenerError(err, OperationType.GET, `settings/${userId}`)
     );
 
     return () => {
@@ -218,16 +256,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
 
+    // Optimistic local update
+    setCompanies((prev) => {
+      const idx = prev.findIndex((c) => c.id === id);
+      const next = idx >= 0 ? prev.map((c) => (c.id === id ? data : c)) : [data, ...prev];
+      try { localStorage.setItem('sp_companies_' + user.uid, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'companies', id), data);
-      return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `companies/${id}`);
-      return id;
     }
+    return id;
   };
 
   const deleteCompany = async (id: string) => {
+    setCompanies((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      try { localStorage.setItem('sp_companies_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
     try {
       await deleteDoc(doc(db, 'companies', id));
     } catch (err) {
@@ -236,6 +286,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setDefaultCompany = async (id: string) => {
+    setCompanies((prev) => {
+      const next = prev.map((c) => ({ ...c, isDefault: c.id === id }));
+      try { localStorage.setItem('sp_companies_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
     for (const comp of companies) {
       try {
         await updateDoc(doc(db, 'companies', comp.id), {
@@ -267,16 +322,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
 
+    setCustomers((prev) => {
+      const idx = prev.findIndex((c) => c.id === id);
+      const next = idx >= 0 ? prev.map((c) => (c.id === id ? data : c)) : [data, ...prev];
+      try { localStorage.setItem('sp_customers_' + user.uid, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'customers', id), data);
-      return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `customers/${id}`);
-      return id;
     }
+    return id;
   };
 
   const deleteCustomer = async (id: string) => {
+    setCustomers((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      try { localStorage.setItem('sp_customers_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
     try {
       await deleteDoc(doc(db, 'customers', id));
     } catch (err) {
@@ -321,6 +387,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
 
+    setQuotations((prev) => {
+      const idx = prev.findIndex((q) => q.id === id);
+      const next = idx >= 0 ? prev.map((q) => (q.id === id ? data : q)) : [data, ...prev];
+      next.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+      try { localStorage.setItem('sp_quotations_' + user.uid, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    if (settings && (!qData.id || qData.id.startsWith('quot_'))) {
+      const nextSeq = (settings.currentSequence || 1) + 1;
+      setSettings((prev) => {
+        if (!prev) return null;
+        const updated = { ...prev, currentSequence: nextSeq };
+        try { localStorage.setItem('sp_settings_' + user.uid, JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+    }
+
     try {
       await setDoc(doc(db, 'quotations', id), data);
 
@@ -330,15 +414,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           updatedAt: new Date().toISOString(),
         });
       }
-
-      return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `quotations/${id}`);
-      return id;
     }
+    return id;
   };
 
   const updateQuotationStatus = async (id: string, status: Quotation['status']) => {
+    setQuotations((prev) => {
+      const next = prev.map((q) => (q.id === id ? { ...q, status, updatedAt: new Date().toISOString() } : q));
+      try { localStorage.setItem('sp_quotations_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
     try {
       await updateDoc(doc(db, 'quotations', id), {
         status,
@@ -350,6 +437,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteQuotation = async (id: string) => {
+    setQuotations((prev) => {
+      const next = prev.filter((q) => q.id !== id);
+      try { localStorage.setItem('sp_quotations_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
     try {
       await deleteDoc(doc(db, 'quotations', id));
     } catch (err) {
@@ -368,7 +460,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await setDoc(doc(db, 'quotations', newId), duplicated);
+    setQuotations((prev) => {
+      const next = [duplicated, ...prev];
+      try { localStorage.setItem('sp_quotations_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
+    try {
+      await setDoc(doc(db, 'quotations', newId), duplicated);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `quotations/${newId}`);
+    }
     return newId;
   };
 
@@ -386,16 +487,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updatedAt: new Date().toISOString(),
     };
 
+    setTemplates((prev) => {
+      const idx = prev.findIndex((t) => t.id === id);
+      const next = idx >= 0 ? prev.map((t) => (t.id === id ? data : t)) : [data, ...prev];
+      try { localStorage.setItem('sp_templates_' + user.uid, JSON.stringify(next)); } catch {}
+      return next;
+    });
+
     try {
       await setDoc(doc(db, 'templates', id), data);
-      return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `templates/${id}`);
-      return id;
     }
+    return id;
   };
 
   const deleteTemplate = async (id: string) => {
+    setTemplates((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      try { localStorage.setItem('sp_templates_' + (user?.uid || ''), JSON.stringify(next)); } catch {}
+      return next;
+    });
     try {
       await deleteDoc(doc(db, 'templates', id));
     } catch (err) {
@@ -406,6 +518,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Settings
   const updateSettings = async (newSettings: Partial<UserSettings>) => {
     if (!user) return;
+    setSettings((prev) => {
+      const updated = prev ? { ...prev, ...newSettings } : ({ userId: user.uid, ...newSettings } as UserSettings);
+      try { localStorage.setItem('sp_settings_' + user.uid, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
     try {
       await setDoc(
         doc(db, 'settings', user.uid),
@@ -471,6 +588,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         templates,
         settings,
         loading,
+        rulesPermissionError,
+        dismissRulesError: () => setRulesPermissionError(false),
         saveCompany,
         deleteCompany,
         setDefaultCompany,

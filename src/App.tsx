@@ -4,6 +4,7 @@ import { DataProvider } from './context/DataContext';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { RulesNoticeBanner } from './components/RulesNoticeBanner';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { QuotationsPage } from './pages/QuotationsPage';
@@ -75,6 +76,9 @@ function MainApp() {
         }}
         onNewQuotation={handleNewQuotation}
       />
+
+      {/* Database Permission Notice if rules not yet deployed in user's project */}
+      <RulesNoticeBanner />
 
       {/* Page Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-6">
