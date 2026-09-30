@@ -255,8 +255,8 @@ export async function generateQuotationPdf(
     currentY = 20;
   }
 
-  // --- 5. RINGKASAN HARGA (Subtotal, Diskon, PPN, Grand Total) ---
-  const summaryBoxWidth = 85;
+  // --- 5. RINGKASAN HARGA (Subtotal, Diskon, PPN, Trade-in, Grand Total) ---
+  const summaryBoxWidth = 92;
   const summaryX = pageWidth - marginRight - summaryBoxWidth;
 
   doc.setFontSize(9);
@@ -285,6 +285,14 @@ export async function generateQuotationPdf(
     currentY += 4.5;
   }
 
+  // Fitur Pengurang / Trade-In (jika aktif & diisi)
+  if (quotation.hasTradeIn && (quotation.tradeInAmount || 0) > 0) {
+    const tradeInLabel = (quotation.tradeInTitle || 'Trade-In / Tukar Tambah').trim();
+    doc.text(tradeInLabel, summaryX, currentY);
+    doc.text(`- ${formatRupiah(quotation.tradeInAmount || 0)}`, pageWidth - marginRight, currentY, { align: 'right' });
+    currentY += 4.5;
+  }
+
   // Grand Total Box
   doc.setFillColor(239, 246, 255);
   doc.setDrawColor(191, 219, 254);
@@ -297,26 +305,17 @@ export async function generateQuotationPdf(
   doc.text('GRAND TOTAL', summaryX, currentY + 1.2);
   doc.text(formatRupiah(quotation.grandTotal), pageWidth - marginRight, currentY + 1.2, { align: 'right' });
 
+  // Catatan kecil unit trade-in (jika ada deskripsi)
+  if (quotation.hasTradeIn && quotation.tradeInDescription && quotation.tradeInDescription.trim()) {
+    doc.setFont('times', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`* Ket. Pengurang: ${quotation.tradeInDescription.trim()}`, marginLeft, currentY + 1.2);
+  }
+
   currentY += 9;
 
-  // --- 6. KOTAK TERBILANG ---
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(marginLeft, currentY, contentWidth, 8, 1.5, 1.5, 'FD');
-
-  doc.setFont('times', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Terbilang :', marginLeft + 3, currentY + 5.2);
-
-  doc.setFont('times', 'bolditalic');
-  doc.setTextColor(30, 64, 175);
-  doc.text(`"${quotation.terbilang || 'Nol Rupiah'}"`, marginLeft + 23, currentY + 5.2);
-
-  currentY += 10;
-
-  // --- 7. TEKS PENUTUP RESMI ---
+  // --- 6. TEKS PENUTUP RESMI ---
   const closingText =
     quotation.closingText ||
     'Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih.';

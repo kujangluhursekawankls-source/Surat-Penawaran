@@ -73,8 +73,12 @@ export interface Quotation {
   discountAmount: number;
   ppnPercent: number; // 0, 11, 12
   ppnAmount: number;
+  hasTradeIn?: boolean; // Fitur pengurang / Trade-in opsional
+  tradeInTitle?: string; // Label pengurang (contoh: "Trade-In / Tukar Tambah")
+  tradeInAmount?: number; // Nominal pengurang (Rp)
+  tradeInDescription?: string; // Keterangan unit trade-in / potongan
   grandTotal: number;
-  terbilang: string;
+  terbilang?: string;
   additionalNotes?: string; // Catatan tambahan / No Rekening bank (opsional)
   status: QuotationStatus;
   createdAt?: string;

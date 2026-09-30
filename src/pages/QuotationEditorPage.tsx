@@ -133,6 +133,16 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
   const [discountValue, setDiscountValue] = useState<number>(initialQuotation?.discountValue || 0);
   const [ppnPercent, setPpnPercent] = useState<number>(initialQuotation?.ppnPercent ?? 11);
 
+  // Trade-In / Menu Pengurang Khusus (Opsional - tidak selalu ada tapi disediakan)
+  const [hasTradeIn, setHasTradeIn] = useState<boolean>(initialQuotation?.hasTradeIn || false);
+  const [tradeInTitle, setTradeInTitle] = useState<string>(
+    initialQuotation?.tradeInTitle || 'Trade-In / Tukar Tambah Unit Lama'
+  );
+  const [tradeInAmount, setTradeInAmount] = useState<number>(initialQuotation?.tradeInAmount || 0);
+  const [tradeInDescription, setTradeInDescription] = useState<string>(
+    initialQuotation?.tradeInDescription || ''
+  );
+
   const [status, setStatus] = useState<Quotation['status']>(initialQuotation?.status || 'draft');
 
   // Active Company snapshot from user's settings
@@ -225,8 +235,12 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
     return Math.round((afterDiscount * Math.max(0, ppnPercent)) / 100);
   }, [afterDiscount, ppnPercent]);
 
-  const grandTotal = afterDiscount + ppnAmount;
-  const grandTotalTerbilang = useMemo(() => terbilang(grandTotal), [grandTotal]);
+  // Trade-In Deduction
+  const tradeInDeduction = useMemo(() => {
+    return hasTradeIn ? Math.max(0, tradeInAmount || 0) : 0;
+  }, [hasTradeIn, tradeInAmount]);
+
+  const grandTotal = Math.max(0, afterDiscount + ppnAmount - tradeInDeduction);
 
   // Customer autofill
   const handleSelectCustomer = (cust: Customer) => {
@@ -265,8 +279,11 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
       discountAmount,
       ppnPercent,
       ppnAmount,
+      hasTradeIn,
+      tradeInTitle: hasTradeIn ? tradeInTitle : '',
+      tradeInAmount: hasTradeIn ? tradeInAmount : 0,
+      tradeInDescription: hasTradeIn ? tradeInDescription : '',
       grandTotal,
-      terbilang: grandTotalTerbilang,
       additionalNotes,
       status,
       createdAt: initialQuotation?.createdAt || new Date().toISOString(),
@@ -818,7 +835,7 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Settings Diskon & PPN */}
+          {/* Settings Diskon, PPN, dan Trade-In */}
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Diskon Penawaran</label>
@@ -861,10 +878,72 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Menu Pengurang / Trade-In (Opsional) */}
+            <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2.5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasTradeIn}
+                  onChange={(e) => setHasTradeIn(e.target.checked)}
+                  className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
+                />
+                <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <span>Aktifkan Menu Pengurang / Trade-In</span>
+                  <span className="text-[10px] font-semibold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                    Opsional
+                  </span>
+                </span>
+              </label>
+
+              {hasTradeIn && (
+                <div className="space-y-2 pt-1 pl-6">
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 mb-0.5">
+                      Judul Pengurang / Trade-In
+                    </label>
+                    <input
+                      type="text"
+                      value={tradeInTitle}
+                      onChange={(e) => setTradeInTitle(e.target.value)}
+                      placeholder="Contoh: Trade-In / Tukar Tambah Unit Lama"
+                      className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 mb-0.5">
+                      Nominal Pemotongan (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={tradeInAmount || ''}
+                      onChange={(e) => setTradeInAmount(Number(e.target.value) || 0)}
+                      placeholder="Contoh: 5000000"
+                      className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-amber-900 mb-0.5">
+                      Keterangan / Detail Unit (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={tradeInDescription}
+                      onChange={(e) => setTradeInDescription(e.target.value)}
+                      placeholder="Contoh: 1 Unit Mesin Lama Merk X Kondisi Bekas"
+                      className="w-full px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Breakdown Box */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5 text-xs">
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5 text-xs h-fit">
             <div className="flex justify-between text-slate-600">
               <span>Subtotal Item</span>
               <span className="font-bold text-slate-900">{formatRupiah(subtotal)}</span>
@@ -884,17 +963,18 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
               </div>
             )}
 
+            {hasTradeIn && tradeInDeduction > 0 && (
+              <div className="flex justify-between text-amber-800 font-medium bg-amber-100/70 px-2.5 py-1.5 rounded-xl border border-amber-200">
+                <span className="truncate mr-2 font-bold">{tradeInTitle || 'Trade-In / Tukar Tambah'}</span>
+                <span className="shrink-0 font-bold">- {formatRupiah(tradeInDeduction)}</span>
+              </div>
+            )}
+
             <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
               <span className="text-xs font-black text-slate-900 uppercase">Grand Total</span>
               <span className="text-base sm:text-lg font-black text-blue-700">{formatRupiah(grandTotal)}</span>
             </div>
           </div>
-        </div>
-
-        {/* Terbilang Box */}
-        <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900">
-          <span className="font-bold text-blue-700">Terbilang : </span>
-          <span className="italic font-bold">"{grandTotalTerbilang}"</span>
         </div>
       </div>
 
