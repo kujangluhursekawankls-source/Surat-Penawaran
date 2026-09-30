@@ -47,8 +47,8 @@ export async function generateQuotationPdf(
   const addressLines: string[] = addressStr ? doc.splitTextToSize(addressStr, maxCenterTextWidth) : [];
 
   // Hitung posisi Y tiap elemen teks
-  const nameFontSize = 13.5;
-  const nameLineHeight = 5.5; // mm
+  const nameFontSize = 18; // Heading perusahaan lebih besar, tegas, dan proporsional (sesuai standar kop resmi)
+  const nameLineHeight = 7.0; // mm
   const normalLineHeight = 3.8; // mm
 
   let textBottomY = kopTopY + nameLineHeight;
@@ -66,7 +66,7 @@ export async function generateQuotationPdf(
   const textTotalHeight = textBottomY - kopTopY;
 
   // TINGGI LOGO SEJAJAR BATAS ATAS TEKS DAN BATAS BAWAH TEKS
-  const logoHeight = Math.max(18, textTotalHeight);
+  const logoHeight = Math.max(22, textTotalHeight);
   const logoWidth = logoHeight; // 1:1 proporsional
   const logoX = marginLeft; // Posisi kiri logo
   const logoY = kopTopY; // Batas atas logo sejajar dengan batas atas teks
@@ -81,9 +81,9 @@ export async function generateQuotationPdf(
   }
 
   // TULIS TEKS KOP SURAT SECARA RATA TENGAH (CENTER ALIGNED)
-  let currentTextY = kopTopY + 4.5;
+  let currentTextY = kopTopY + 5.2;
 
-  // Nama Perusahaan (Tebal, Navy, Rata Tengah)
+  // Nama Perusahaan (Tebal, Navy, Rata Tengah, Heading Besar & Elegan)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(nameFontSize);
   doc.setTextColor(20, 35, 75); // Royal Navy
@@ -95,7 +95,7 @@ export async function generateQuotationPdf(
   doc.setTextColor(55, 65, 81);
 
   if (addressLines.length > 0) {
-    currentTextY += normalLineHeight;
+    currentTextY += normalLineHeight + 1.2;
     doc.text(addressLines, centerX, currentTextY, { align: 'center' });
     currentTextY += (addressLines.length - 1) * normalLineHeight;
   }
@@ -113,7 +113,7 @@ export async function generateQuotationPdf(
   }
 
   // Posisi Y untuk Garis Pemisah Kop Surat (di bawah elemen yang tertinggi)
-  const kopEndY = Math.max(logoY + logoHeight, currentTextY) + 3;
+  const kopEndY = Math.max(logoY + logoHeight, currentTextY) + 3.5;
 
   // GARIS PEMISAH KOP SURAT GANDA RESMI (Tebal 1.2mm + Tipis 0.4mm)
   doc.setDrawColor(20, 35, 75);
@@ -309,19 +309,7 @@ export async function generateQuotationPdf(
   doc.setTextColor(30, 64, 175);
   doc.text(`"${quotation.terbilang || 'Nol Rupiah'}"`, marginLeft + 23, currentY + 5.2);
 
-  currentY += 12;
-
-  // Catatan rekening bank (opsional jika diisi)
-  if (quotation.additionalNotes && quotation.additionalNotes.trim()) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
-    doc.text('Catatan / Pembayaran :', marginLeft, currentY);
-    doc.setFont('helvetica', 'normal');
-    const noteLines = doc.splitTextToSize(quotation.additionalNotes, contentWidth);
-    doc.text(noteLines, marginLeft, currentY + 4);
-    currentY += noteLines.length * 3.8 + 4;
-  }
+  currentY += 10;
 
   // --- 7. TEKS PENUTUP RESMI ---
   const closingText =
@@ -333,15 +321,15 @@ export async function generateQuotationPdf(
   doc.setFontSize(8.5);
   doc.setTextColor(30, 41, 59);
   doc.text(closingLines, marginLeft, currentY);
-  currentY += closingLines.length * 4.2 + 6;
+  currentY += closingLines.length * 4.2 + 5;
 
   // Cek overflow sebelum tanda tangan
-  if (currentY > pageHeight - 55) {
+  if (currentY > pageHeight - 65) {
     doc.addPage();
     currentY = 20;
   }
 
-  // --- 8. BLOK TANDA TANGAN (KANAN BAWAH) ---
+  // --- 8. BLOK TANDA TANGAN PENGIRIM SURAT (KANAN) ---
   const signWidth = 70;
   const signX = pageWidth - marginRight - signWidth;
   let signY = currentY;
@@ -399,6 +387,42 @@ export async function generateQuotationPdf(
   doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
   doc.text(directorTitle, signX, signY);
+  signY += 6; // Jarak setelah tanda tangan selesai
+
+  // --- 9. CATATAN / PEMBAYARAN : SISI KIRI, DI BAWAH TANDA TANGAN PENGIRIM SURAT (JANGAN SEJAJAR) ---
+  if (quotation.additionalNotes && quotation.additionalNotes.trim()) {
+    let notesY = Math.max(currentY + 36, signY) + 2;
+
+    const notesWidth = contentWidth; // Lebar proporsional di sisi kiri dokumen
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    const noteLines = doc.splitTextToSize(quotation.additionalNotes.trim(), notesWidth - 8);
+    const boxHeight = noteLines.length * 3.6 + 9;
+
+    // Cek overflow jika butuh halaman baru
+    if (notesY + boxHeight > pageHeight - 15) {
+      doc.addPage();
+      notesY = 20;
+    }
+
+    // Desain Box Elegan di Sisi Kiri
+    doc.setFillColor(248, 250, 252); // slate-50 lembut
+    doc.setDrawColor(203, 213, 225); // slate-300
+    doc.setLineWidth(0.3);
+    doc.roundedRect(marginLeft, notesY, notesWidth, boxHeight, 1.5, 1.5, 'FD');
+
+    // Judul Catatan / Pembayaran
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text('Catatan / Syarat Pembayaran :', marginLeft + 3.5, notesY + 4.5);
+
+    // Isi Catatan / Nomor Rekening
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(51, 65, 85); // slate-700
+    doc.text(noteLines, marginLeft + 3.5, notesY + 8.5);
+  }
 
   // --- 9. FOOTER RESMI ---
   const totalPages = doc.getNumberOfPages();
