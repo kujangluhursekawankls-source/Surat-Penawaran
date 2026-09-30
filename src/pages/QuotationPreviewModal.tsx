@@ -27,27 +27,45 @@ export const QuotationPreviewModal: React.FC<QuotationPreviewModalProps> = ({
   onClose,
   onEdit,
 }) => {
-  const { updateQuotationStatus } = useData();
+  const { updateQuotationStatus, companies } = useData();
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
   const [isEditingFileName, setIsEditingFileName] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
+  // Selalu gunakan profil Kop Surat terbaru dari Pengaturan
+  const activeCompany =
+    companies.find((c) => c.id === quotation?.companyProfileId) ||
+    companies.find((c) => c.isDefault) ||
+    companies[0] ||
+    quotation?.companySnapshot ||
+    {};
+
+  const quotationWithCompany: Quotation | null = quotation
+    ? {
+        ...quotation,
+        companySnapshot: {
+          ...(quotation.companySnapshot || {}),
+          ...activeCompany,
+        },
+      }
+    : null;
+
   useEffect(() => {
-    if (!quotation) return;
+    if (!quotationWithCompany) return;
 
     const initialFileName = generatePdfFileName(
-      quotation.customerCompany,
-      quotation.customerPic,
-      quotation.quotationNumber
+      quotationWithCompany.customerCompany,
+      quotationWithCompany.customerPic,
+      quotationWithCompany.quotationNumber
     );
     setFileName(initialFileName);
 
     let activeUrl: string | null = null;
     setLoadingPdf(true);
 
-    generateQuotationPdf(quotation, initialFileName)
+    generateQuotationPdf(quotationWithCompany, initialFileName)
       .then((res) => {
         setPdfBlobUrl(res.blobUrl || null);
         activeUrl = res.blobUrl || null;
@@ -64,13 +82,14 @@ export const QuotationPreviewModal: React.FC<QuotationPreviewModalProps> = ({
         URL.revokeObjectURL(activeUrl);
       }
     };
-  }, [quotation]);
+  }, [quotationWithCompany?.id, quotationWithCompany?.updatedAt, activeCompany.updatedAt, activeCompany.name]);
 
-  if (!quotation) return null;
+  if (!quotation || !quotationWithCompany) return null;
+  const curQuotation = quotationWithCompany;
 
   const handleDownload = async () => {
     try {
-      const res = await generateQuotationPdf(quotation, fileName);
+      const res = await generateQuotationPdf(curQuotation, fileName);
       res.doc.save(fileName || res.fileName);
     } catch (err) {
       console.error('Download error:', err);
@@ -79,7 +98,7 @@ export const QuotationPreviewModal: React.FC<QuotationPreviewModalProps> = ({
 
   const handlePrint = async () => {
     try {
-      const res = await generateQuotationPdf(quotation, fileName);
+      const res = await generateQuotationPdf(curQuotation, fileName);
       res.doc.autoPrint();
       window.open(res.doc.output('bloburl'), '_blank');
     } catch (err) {
@@ -89,15 +108,15 @@ export const QuotationPreviewModal: React.FC<QuotationPreviewModalProps> = ({
 
   const handleSendWhatsApp = () => {
     // Generate standard WhatsApp message
-    const picGreeting = quotation.customerPic ? `Bapak/Ibu ${quotation.customerPic}` : 'Bapak/Ibu';
-    const compName = quotation.customerCompany ? ` (${quotation.customerCompany})` : '';
+    const picGreeting = curQuotation.customerPic ? `Bapak/Ibu ${curQuotation.customerPic}` : 'Bapak/Ibu';
+    const compName = curQuotation.customerCompany ? ` (${curQuotation.customerCompany})` : '';
 
     const text = `Yth. ${picGreeting}${compName},
 
 Bersama pesan ini kami kirimkan Surat Penawaran Harga resmi kami:
-📄 *No. Surat:* ${quotation.quotationNumber}
-📌 *Perihal:* ${quotation.subject}
-💰 *Total Nilai:* ${formatRupiah(quotation.grandTotal)}
+📄 *No. Surat:* ${curQuotation.quotationNumber}
+📌 *Perihal:* ${curQuotation.subject}
+💰 *Total Nilai:* ${formatRupiah(curQuotation.grandTotal)}
 📑 *Nama File PDF:* ${fileName}
 
 File PDF penawaran telah kami persiapkan. Mohon dapat dipelajari lebih lanjut.
@@ -105,9 +124,9 @@ Apabila ada pertanyaan mengenai spesifikasi teknis maupun negosiasi, kami siap m
 
 Terima kasih atas perhatian dan kerja samanya.
 Hormat Kami,
-*${quotation.companySnapshot?.name || 'CV Mulia Tekhnik Abadi'}*`;
+*${curQuotation.companySnapshot?.name || ''}*`;
 
-    let phone = quotation.customerPhone || '';
+    let phone = curQuotation.customerPhone || '';
     phone = phone.replace(/[^0-9]/g, '');
     if (phone.startsWith('0')) {
       phone = '62' + phone.slice(1);
@@ -121,17 +140,17 @@ Hormat Kami,
   };
 
   const handleSendEmail = () => {
-    const subject = encodeURIComponent(`Surat Penawaran: ${quotation.quotationNumber} - ${quotation.subject}`);
+    const subject = encodeURIComponent(`Surat Penawaran: ${curQuotation.quotationNumber} - ${curQuotation.subject}`);
     const body = encodeURIComponent(
-      `Kepada Yth. ${quotation.customerPic || quotation.customerCompany || 'Bapak/Ibu'},\n\nTerlampir kami kirimkan Surat Penawaran No. ${quotation.quotationNumber} dengan perihal ${quotation.subject}.\nTotal Nilai Penawaran: ${formatRupiah(quotation.grandTotal)}.\n\nFile dokumen PDF: ${fileName}\n\nTerima kasih.`
+      `Kepada Yth. ${curQuotation.customerPic || curQuotation.customerCompany || 'Bapak/Ibu'},\n\nTerlampir kami kirimkan Surat Penawaran No. ${curQuotation.quotationNumber} dengan perihal ${curQuotation.subject}.\nTotal Nilai Penawaran: ${formatRupiah(curQuotation.grandTotal)}.\n\nFile dokumen PDF: ${fileName}\n\nTerima kasih.`
     );
-    const mailto = `mailto:${quotation.customerEmail || ''}?subject=${subject}&body=${body}`;
+    const mailto = `mailto:${curQuotation.customerEmail || ''}?subject=${subject}&body=${body}`;
     window.location.href = mailto;
   };
 
   const handleStatusChange = async (newStatus: Quotation['status']) => {
     setStatusMenuOpen(false);
-    await updateQuotationStatus(quotation.id, newStatus);
+    await updateQuotationStatus(curQuotation.id, newStatus);
   };
 
   return (
@@ -142,14 +161,14 @@ Hormat Kami,
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black text-blue-700 bg-blue-100/70 px-2.5 py-0.5 rounded-md">
-                {quotation.quotationNumber}
+                {curQuotation.quotationNumber}
               </span>
               <div className="relative">
                 <button
                   onClick={() => setStatusMenuOpen(!statusMenuOpen)}
                   className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 cursor-pointer"
                 >
-                  <span className="capitalize">{quotation.status}</span>
+                  <span className="capitalize">{curQuotation.status}</span>
                   <ChevronDown className="w-3 h-3 text-slate-400" />
                 </button>
                 {statusMenuOpen && (
@@ -160,7 +179,7 @@ Hormat Kami,
                           key={st}
                           onClick={() => handleStatusChange(st)}
                           className={`w-full text-left px-3 py-1.5 capitalize hover:bg-blue-50 transition cursor-pointer ${
-                            quotation.status === st ? 'font-bold text-blue-600' : 'text-slate-700'
+                            curQuotation.status === st ? 'font-bold text-blue-600' : 'text-slate-700'
                           }`}
                         >
                           {st}
@@ -172,7 +191,7 @@ Hormat Kami,
               </div>
             </div>
             <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate mt-1">
-              {quotation.customerCompany || quotation.toRecipient || 'Customer'}
+              {curQuotation.customerCompany || curQuotation.toRecipient || 'Customer'}
             </h2>
           </div>
 
@@ -180,7 +199,7 @@ Hormat Kami,
             <button
               onClick={() => {
                 onClose();
-                onEdit(quotation);
+                onEdit(curQuotation);
               }}
               className="p-2 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition cursor-pointer"
               title="Edit Surat Penawaran"
@@ -254,7 +273,7 @@ Hormat Kami,
         <div className="p-3 sm:p-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">
-              Total: <strong className="text-slate-900">{formatRupiah(quotation.grandTotal)}</strong>
+              Total: <strong className="text-slate-900">{formatRupiah(curQuotation.grandTotal)}</strong>
             </span>
           </div>
 

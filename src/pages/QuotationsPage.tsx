@@ -32,7 +32,7 @@ export const QuotationsPage: React.FC<QuotationsPageProps> = ({
   onEditQuotation,
   onViewQuotation,
 }) => {
-  const { quotations, deleteQuotation, duplicateQuotation, updateQuotationStatus } = useData();
+  const { quotations, companies, deleteQuotation, duplicateQuotation, updateQuotationStatus } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -70,7 +70,19 @@ export const QuotationsPage: React.FC<QuotationsPageProps> = ({
 
   const handleDirectDownload = async (q: Quotation) => {
     try {
-      const res = await generateQuotationPdf(q);
+      const activeCompany =
+        companies.find((c) => c.id === q.companyProfileId) ||
+        companies.find((c) => c.isDefault) ||
+        companies[0] ||
+        q.companySnapshot;
+      const resolvedQuotation: Quotation = {
+        ...q,
+        companySnapshot: {
+          ...(q.companySnapshot || {}),
+          ...activeCompany,
+        },
+      };
+      const res = await generateQuotationPdf(resolvedQuotation);
       res.doc.save(res.fileName);
     } catch (e) {
       console.error(e);

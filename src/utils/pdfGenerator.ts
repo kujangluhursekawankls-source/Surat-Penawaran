@@ -19,17 +19,14 @@ export async function generateQuotationPdf(
   const marginLeft = 15;
   const marginRight = 15;
   const contentWidth = pageWidth - marginLeft - marginRight; // 180mm
+  const centerX = pageWidth / 2; // 105mm (Rata Tengah)
 
   const company = quotation.companySnapshot || {};
 
-  // Cursor Y
-  let currentY = 16;
-
   // --- 1. KOP SURAT PROFESIONAL (RATA TENGAH & TINGGI LOGO SEJAJAR ATAS-BAWAH TEKS) ---
-  const hasLogo = Boolean(company.logoUrl && company.logoUrl.startsWith('data:image'));
+  const kopTopY = 15; // Batas atas Kop Surat
 
-  // Hitung baris-baris teks Kop Surat
-  const companyName = (company.name || '').trim().toUpperCase();
+  const companyName = (company.name || 'PERUSAHAAN').trim().toUpperCase();
   const addressStr = `${company.address || ''}${company.city ? ', ' + company.city : ''}${company.postalCode ? ' ' + company.postalCode : ''}`.trim();
 
   const contactsArr: string[] = [];
@@ -41,115 +38,94 @@ export async function generateQuotationPdf(
 
   const npwpStr = company.npwp ? `NPWP: ${company.npwp}` : '';
 
-  // Estimasi lebar maksimal teks kop surat (maksimum 135mm agar rapi berdampingan)
-  const maxAllowedTextWidth = hasLogo ? 135 : contentWidth;
-
+  // Hitung baris teks dan kalkulasi tinggi total teks secara presisi
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  const addressLines = addressStr ? doc.splitTextToSize(addressStr, maxAllowedTextWidth) : [];
 
-  // Hitung tinggi total blok teks
-  // Header: Nama (6mm) + Spasi (1mm) + Alamat (baris * 3.6mm) + Kontak (3.6mm) + NPWP (3.6mm)
-  let textLinesCount = 0;
-  if (addressLines.length > 0) textLinesCount += addressLines.length;
-  if (contactStr) textLinesCount += 1;
-  if (npwpStr) textLinesCount += 1;
+  // Batasi lebar baris agar tidak bertabrakan dengan logo di kiri (lebar aman 130mm di tengah halaman)
+  const maxCenterTextWidth = 136;
+  const addressLines: string[] = addressStr ? doc.splitTextToSize(addressStr, maxCenterTextWidth) : [];
 
-  // Total tinggi teks dari batas atas nama perusahaan sampai batas bawah teks terakhir
-  const nameHeaderHeight = 5.5; // mm
-  const lineHeight = 3.6; // mm
-  const totalTextHeight = nameHeaderHeight + (textLinesCount * lineHeight);
+  // Hitung posisi Y tiap elemen teks
+  const nameFontSize = 13.5;
+  const nameLineHeight = 5.5; // mm
+  const normalLineHeight = 3.8; // mm
 
-  // Tinggi logo harus sejajar batas atas teks dan batas bawah teks
-  const logoHeight = Math.max(18, Math.min(32, totalTextHeight));
-  const logoWidth = logoHeight; // Proporsional 1:1
-  const gapBetweenLogoAndText = 5; // mm
-
-  // Hitung lebar terpanjang teks untuk memposisikan Kop Surat secara RATA TENGAH
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13.5);
-  const nameWidth = doc.getTextWidth(companyName);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  const contactWidth = contactStr ? doc.getTextWidth(contactStr) : 0;
-  const npwpWidth = npwpStr ? doc.getTextWidth(npwpStr) : 0;
-
-  let calculatedTextWidth = Math.max(nameWidth, contactWidth, npwpWidth, 80);
+  let textBottomY = kopTopY + nameLineHeight;
   if (addressLines.length > 0) {
-    addressLines.forEach((l: string) => {
-      const w = doc.getTextWidth(l);
-      if (w > calculatedTextWidth) calculatedTextWidth = w;
-    });
+    textBottomY += addressLines.length * normalLineHeight;
   }
-  calculatedTextWidth = Math.min(calculatedTextWidth, maxAllowedTextWidth);
+  if (contactStr) {
+    textBottomY += normalLineHeight;
+  }
+  if (npwpStr) {
+    textBottomY += normalLineHeight;
+  }
 
-  // Hitung posisi horizontal gabungan (Logo + Jarak + Teks) agar berada tepat di tengah halaman (RATA TENGAH)
-  const combinedKopWidth = hasLogo ? (logoWidth + gapBetweenLogoAndText + calculatedTextWidth) : calculatedTextWidth;
-  let kopStartX = (pageWidth - combinedKopWidth) / 2;
-  if (kopStartX < marginLeft) kopStartX = marginLeft;
+  // Tinggi total teks dari batas atas nama perusahaan sampai batas bawah baris teks terakhir
+  const textTotalHeight = textBottomY - kopTopY;
 
-  const kopLogoX = kopStartX;
-  const kopTextX = hasLogo ? (kopStartX + logoWidth + gapBetweenLogoAndText) : kopStartX;
+  // TINGGI LOGO SEJAJAR BATAS ATAS TEKS DAN BATAS BAWAH TEKS
+  const logoHeight = Math.max(18, textTotalHeight);
+  const logoWidth = logoHeight; // 1:1 proporsional
+  const logoX = marginLeft; // Posisi kiri logo
+  const logoY = kopTopY; // Batas atas logo sejajar dengan batas atas teks
 
-  // Gambar Logo jika ada (sejajar batas atas teks sampai batas bawah teks)
-  if (hasLogo && company.logoUrl) {
+  // Gambar logo di sisi kiri (sejajar persis atas & bawah teks)
+  if (company.logoUrl && (company.logoUrl.startsWith('data:image') || company.logoUrl.startsWith('blob:') || company.logoUrl.startsWith('http'))) {
     try {
-      doc.addImage(
-        company.logoUrl,
-        'PNG',
-        kopLogoX,
-        currentY,
-        logoWidth,
-        logoHeight,
-        undefined,
-        'FAST'
-      );
+      doc.addImage(company.logoUrl, 'PNG', logoX, logoY, logoWidth, logoHeight, undefined, 'FAST');
     } catch {
-      // ignore
+      // fallback if image fail
     }
   }
 
-  // Tulis Nama Perusahaan
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13.5);
-  doc.setTextColor(20, 35, 75); // Navy Resmi
-  doc.text(companyName || 'PERUSAHAAN', kopTextX, currentY + 4.5);
+  // TULIS TEKS KOP SURAT SECARA RATA TENGAH (CENTER ALIGNED)
+  let currentTextY = kopTopY + 4.5;
 
-  // Tulis Alamat dan Kontak
-  let runningTextY = currentY + 4.5 + lineHeight;
+  // Nama Perusahaan (Tebal, Navy, Rata Tengah)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(nameFontSize);
+  doc.setTextColor(20, 35, 75); // Royal Navy
+  doc.text(companyName, centerX, currentTextY, { align: 'center' });
+
+  // Alamat Lengkap (Rata Tengah)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(55, 65, 81);
 
   if (addressLines.length > 0) {
-    doc.text(addressLines, kopTextX, runningTextY);
-    runningTextY += addressLines.length * lineHeight;
+    currentTextY += normalLineHeight;
+    doc.text(addressLines, centerX, currentTextY, { align: 'center' });
+    currentTextY += (addressLines.length - 1) * normalLineHeight;
   }
 
+  // Kontak (Telp, WA, Email, Web - Rata Tengah)
   if (contactStr) {
-    doc.text(contactStr, kopTextX, runningTextY);
-    runningTextY += lineHeight;
+    currentTextY += normalLineHeight;
+    doc.text(contactStr, centerX, currentTextY, { align: 'center' });
   }
 
+  // NPWP (Rata Tengah)
   if (npwpStr) {
-    doc.text(npwpStr, kopTextX, runningTextY);
-    runningTextY += lineHeight;
+    currentTextY += normalLineHeight;
+    doc.text(npwpStr, centerX, currentTextY, { align: 'center' });
   }
 
-  // Update cursor Y melewati tinggi kop surat
-  currentY = Math.max(currentY + logoHeight, runningTextY) + 3;
+  // Posisi Y untuk Garis Pemisah Kop Surat (di bawah elemen yang tertinggi)
+  const kopEndY = Math.max(logoY + logoHeight, currentTextY) + 3;
 
-  // Garis Pemisah Kop Surat Resmi (Garis Ganda: Tebal 1.2mm + Tipis 0.4mm)
+  // GARIS PEMISAH KOP SURAT GANDA RESMI (Tebal 1.2mm + Tipis 0.4mm)
   doc.setDrawColor(20, 35, 75);
   doc.setLineWidth(1.2);
-  doc.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+  doc.line(marginLeft, kopEndY, pageWidth - marginRight, kopEndY);
 
-  currentY += 1.2;
+  const thinLineY = kopEndY + 1.2;
   doc.setLineWidth(0.4);
-  doc.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+  doc.line(marginLeft, thinLineY, pageWidth - marginRight, thinLineY);
 
-  currentY += 6;
+  // Kursor Y berpindah ke isi surat
+  let currentY = thinLineY + 6;
 
   // --- 2. INFORMASI SURAT & TUJUAN ---
   const dateFormatted = formatIndonesianDate(quotation.date);
@@ -162,7 +138,7 @@ export async function generateQuotationPdf(
   const placeDate = city ? `${city}, ${dateFormatted}` : dateFormatted;
   doc.text(placeDate, pageWidth - marginRight, currentY, { align: 'right' });
 
-  // Nomor, Lampiran (opsional/bisa diedit ada atau tidaknya), Perihal
+  // Nomor, Lampiran (opsional/bisa diedit ada atau tidaknya), Perihal di kiri
   const metaLabelX = marginLeft;
   const metaValX = marginLeft + 24;
 
@@ -171,7 +147,10 @@ export async function generateQuotationPdf(
   currentY += 4.5;
 
   // Lampiran: bisa diedit ada atau tidaknya
-  const showAttachment = quotation.hasAttachment !== false && Boolean(quotation.attachment && quotation.attachment.trim() !== '' && quotation.attachment !== '-');
+  const showAttachment =
+    quotation.hasAttachment !== false &&
+    Boolean(quotation.attachment && quotation.attachment.trim() !== '' && quotation.attachment !== '-');
+
   if (showAttachment) {
     doc.text('Lampiran', metaLabelX, currentY);
     doc.text(`:  ${quotation.attachment}`, metaValX, currentY);
@@ -345,7 +324,6 @@ export async function generateQuotationPdf(
   }
 
   // --- 7. TEKS PENUTUP RESMI ---
-  // "Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih."
   const closingText =
     quotation.closingText ||
     'Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih.';
@@ -382,7 +360,7 @@ export async function generateQuotationPdf(
   const signAreaY = signY;
   const signAreaHeight = 20;
 
-  if (company.stampUrl && company.stampUrl.startsWith('data:image')) {
+  if (company.stampUrl && (company.stampUrl.startsWith('data:image') || company.stampUrl.startsWith('blob:') || company.stampUrl.startsWith('http'))) {
     try {
       doc.addImage(company.stampUrl, 'PNG', signX + 18, signAreaY, 20, 20, undefined, 'FAST');
     } catch {
@@ -390,7 +368,7 @@ export async function generateQuotationPdf(
     }
   }
 
-  if (company.signatureUrl && company.signatureUrl.startsWith('data:image')) {
+  if (company.signatureUrl && (company.signatureUrl.startsWith('data:image') || company.signatureUrl.startsWith('blob:') || company.signatureUrl.startsWith('http'))) {
     try {
       doc.addImage(company.signatureUrl, 'PNG', signX, signAreaY, 28, signAreaHeight, undefined, 'FAST');
     } catch {

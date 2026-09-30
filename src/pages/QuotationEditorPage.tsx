@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import {
   Quotation,
@@ -51,6 +51,16 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(
     initialQuotation?.companyProfileId || companies.find((c) => c.isDefault)?.id || companies[0]?.id || ''
   );
+
+  // Auto-sync company ID once companies load from Firestore
+  useEffect(() => {
+    if (!selectedCompanyId && companies.length > 0) {
+      const target = companies.find((c) => c.isDefault) || companies[0];
+      if (target) {
+        setSelectedCompanyId(target.id);
+      }
+    }
+  }, [companies, selectedCompanyId]);
 
   // Form State (Clean - No dummy sample customer or sample fake data)
   const [quotationNumber, setQuotationNumber] = useState(
@@ -415,6 +425,56 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* PRATINJAU KOP SURAT AKTIF (RATA TENGAH & SEJAJAR) */}
+        {activeCompany.name && (
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <span className="text-[10px] font-bold text-slate-400 block mb-2 uppercase">
+              Tampilan Kop Surat Pada Dokumen Resmi:
+            </span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-center gap-4 text-center max-w-xl mx-auto">
+                {activeCompany.logoUrl ? (
+                  <div className="shrink-0 flex items-center justify-center">
+                    <img
+                      src={activeCompany.logoUrl}
+                      alt={activeCompany.name}
+                      className="w-16 h-16 object-contain rounded-xl border bg-white p-1"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm sm:text-base font-black text-slate-900 tracking-tight uppercase leading-snug">
+                    {activeCompany.name}
+                  </h4>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                    {activeCompany.address}
+                    {activeCompany.city ? `, ${activeCompany.city}` : ''}
+                    {activeCompany.postalCode ? ` ${activeCompany.postalCode}` : ''}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[10px] text-slate-500 mt-1 font-medium">
+                    {activeCompany.phone && <span>Telp: {activeCompany.phone}</span>}
+                    {activeCompany.whatsapp && <span>| WA: {activeCompany.whatsapp}</span>}
+                    {activeCompany.email && <span>| Email: {activeCompany.email}</span>}
+                    {activeCompany.website && <span>| Web: {activeCompany.website}</span>}
+                  </div>
+                  {activeCompany.npwp && (
+                    <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
+                      NPWP: {activeCompany.npwp}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Garis Ganda Kop Surat Resmi */}
+              <div className="pt-2">
+                <div className="h-[2px] bg-slate-800 w-full" />
+                <div className="h-[0.7px] bg-slate-800 w-full mt-[1.5px]" />
+              </div>
+            </div>
           </div>
         )}
       </div>
