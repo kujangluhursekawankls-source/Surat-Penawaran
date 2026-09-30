@@ -77,6 +77,8 @@ export interface Quotation {
   tradeInTitle?: string; // Label pengurang (contoh: "Trade-In / Tukar Tambah")
   tradeInAmount?: number; // Nominal pengurang (Rp)
   tradeInDescription?: string; // Keterangan unit trade-in / potongan
+  validityPeriod?: string; // Masa Berlaku Penawaran (contoh: "14 hari kalender sejak tanggal surat")
+  paymentScheme?: string; // Skema & Termin Pembayaran (contoh: "DP 50%, Pelunasan 50%")
   grandTotal: number;
   terbilang?: string;
   additionalNotes?: string; // Catatan tambahan / No Rekening bank (opsional)

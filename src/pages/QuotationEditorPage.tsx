@@ -143,6 +143,15 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
     initialQuotation?.tradeInDescription || ''
   );
 
+  // Masa Berlaku Penawaran & Skema Pembayaran (Bisa diedit - Standar Kantor)
+  const [validityPeriod, setValidityPeriod] = useState<string>(
+    initialQuotation?.validityPeriod || '14 (empat belas) hari kalender sejak tanggal surat'
+  );
+  const [paymentScheme, setPaymentScheme] = useState<string>(
+    initialQuotation?.paymentScheme ||
+      'Uang Muka (DP) 50% saat SPK / PO disetujui, Pelunasan 50% setelah pekerjaan selesai / serah terima'
+  );
+
   const [status, setStatus] = useState<Quotation['status']>(initialQuotation?.status || 'draft');
 
   // Active Company snapshot from user's settings
@@ -283,6 +292,8 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
       tradeInTitle: hasTradeIn ? tradeInTitle : '',
       tradeInAmount: hasTradeIn ? tradeInAmount : 0,
       tradeInDescription: hasTradeIn ? tradeInDescription : '',
+      validityPeriod: validityPeriod.trim(),
+      paymentScheme: paymentScheme.trim(),
       grandTotal,
       additionalNotes,
       status,
@@ -978,28 +989,115 @@ export const QuotationEditorPage: React.FC<QuotationEditorPageProps> = ({
         </div>
       </div>
 
-      {/* 6. ISI SURAT PENUTUP (DIRAPIHKAN SESUAI PERMINTAAN USER) */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
-        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
-          Isi Surat Penutup
-        </h3>
-        <textarea
-          rows={3}
-          value={closingText}
-          onChange={(e) => setClosingText(e.target.value)}
-          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-none leading-relaxed"
-        />
+      {/* 6. KETENTUAN PENAWARAN: MASA BERLAKU & SKEMA PEMBAYARAN (STANDAR KANTOR) */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">
+              Syarat & Ketentuan Penawaran (Standar Kantor & Profesional)
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              Atur masa berlaku penawaran harga dan skema termin pembayaran agar jelas dan mengikat resmi.
+            </p>
+          </div>
+        </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Masa Berlaku Penawaran */}
+          <div className="space-y-2 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200">
+            <label className="block text-xs font-bold text-slate-800">
+              1. Masa Berlaku Penawaran
+            </label>
+            <div className="flex flex-wrap gap-1.5 pb-1">
+              {[
+                { label: '7 Hari', val: '7 (tujuh) hari kalender sejak tanggal surat diterbitkan' },
+                { label: '14 Hari (Standar)', val: '14 (empat belas) hari kalender sejak tanggal surat diterbitkan' },
+                { label: '30 Hari', val: '30 (tiga puluh) hari kalender sejak tanggal surat diterbitkan' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setValidityPeriod(preset.val)}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition ${
+                    validityPeriod === preset.val
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={validityPeriod}
+              onChange={(e) => setValidityPeriod(e.target.value)}
+              placeholder="Contoh: 14 (empat belas) hari kalender sejak tanggal surat"
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            />
+          </div>
+
+          {/* Skema & Termin Pembayaran */}
+          <div className="space-y-2 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200">
+            <label className="block text-xs font-bold text-slate-800">
+              2. Skema & Termin Pembayaran
+            </label>
+            <div className="flex flex-wrap gap-1.5 pb-1">
+              {[
+                { label: 'DP 50% - 50%', val: 'Uang Muka (DP) 50% saat PO disetujui, Pelunasan 50% setelah pekerjaan selesai / BAST' },
+                { label: 'DP 30% - 40% - 30%', val: 'DP 30% saat SPK/PO, Termin Progress 40%, Pelunasan 30% setelah serah terima' },
+                { label: '100% Di Muka', val: 'Pembayaran 100% penuh di muka sebelum proses pekerjaan / pengiriman' },
+                { label: 'COD / Selesai', val: 'Pembayaran 100% setelah barang / pekerjaan diterima dengan baik (COD)' },
+                { label: 'Tempo Net 30', val: 'Pembayaran dengan termin jatuh tempo Net 30 hari setelah invoice diterima' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setPaymentScheme(preset.val)}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition ${
+                    paymentScheme === preset.val
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              rows={2}
+              value={paymentScheme}
+              onChange={(e) => setPaymentScheme(e.target.value)}
+              placeholder="Contoh: DP 50% saat PO disetujui, Pelunasan 50% setelah pekerjaan selesai"
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 leading-snug"
+            />
+          </div>
+        </div>
+
+        {/* Instruksi Rekening Transfer Bank & Catatan */}
         <div className="pt-2">
           <label className="block text-xs font-bold text-slate-700 mb-1">
-            Catatan Tambahan / Nomor Rekening Bank Pembayaran (Opsional)
+            3. Instruksi Nomor Rekening Bank Pembayaran & Catatan Tambahan (Opsional)
           </label>
           <input
             type="text"
             value={additionalNotes}
             onChange={(e) => setAdditionalNotes(e.target.value)}
-            placeholder="Contoh: Pembayaran dapat ditransfer ke BCA No. Rek: 1234567890 a/n Perusahaan"
+            placeholder="Contoh: Pembayaran dapat ditransfer ke Bank BCA No. Rek: 1234567890 a/n Perusahaan"
             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none"
+          />
+        </div>
+
+        {/* Isi Surat Penutup */}
+        <div className="pt-2 border-t border-slate-100">
+          <label className="block text-xs font-bold text-slate-700 mb-1">
+            Isi Kalimat Penutup Surat
+          </label>
+          <textarea
+            rows={2}
+            value={closingText}
+            onChange={(e) => setClosingText(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-none leading-relaxed"
           />
         </div>
       </div>

@@ -404,39 +404,79 @@ export async function generateQuotationPdf(
   doc.text(directorTitle, signX, signY);
   signY += 6; // Jarak setelah tanda tangan selesai
 
-  // --- 9. CATATAN / PEMBAYARAN : SISI KIRI, DI BAWAH TANDA TANGAN PENGIRIM SURAT (JANGAN SEJAJAR) ---
-  if (quotation.additionalNotes && quotation.additionalNotes.trim()) {
-    let notesY = Math.max(currentY + 36, signY) + 2;
+  // --- 9. KETENTUAN PENAWARAN & SYARAT PEMBAYARAN (STANDAR KANTOR & PROFESIONAL) ---
+  const validityText = (quotation.validityPeriod || '14 (empat belas) hari kalender sejak tanggal surat diterbitkan').trim();
+  const paymentSchemeText = (
+    quotation.paymentScheme ||
+    'Uang Muka (DP) 50% saat SPK / PO disetujui, Pelunasan 50% setelah pekerjaan selesai / BAST'
+  ).trim();
+  const notesText = (quotation.additionalNotes || '').trim();
 
-    const notesWidth = contentWidth; // Lebar proporsional di sisi kiri dokumen
-    doc.setFont('times', 'normal');
-    doc.setFontSize(8.5);
-    const noteLines = doc.splitTextToSize(quotation.additionalNotes.trim(), notesWidth - 8);
-    const boxHeight = noteLines.length * 3.8 + 9;
+  let notesY = Math.max(currentY + 36, signY) + 2;
+  const notesWidth = contentWidth; // 180mm
+  const labelColWidth = 38; // mm untuk kolom label
+  const valColWidth = notesWidth - labelColWidth - 10;
 
-    // Cek overflow jika butuh halaman baru
-    if (notesY + boxHeight > pageHeight - 15) {
-      doc.addPage();
-      notesY = 20;
-    }
+  doc.setFont('times', 'normal');
+  doc.setFontSize(8.5);
 
-    // Desain Box Elegan di Sisi Kiri
-    doc.setFillColor(248, 250, 252); // slate-50 lembut
-    doc.setDrawColor(203, 213, 225); // slate-300
-    doc.setLineWidth(0.3);
-    doc.roundedRect(marginLeft, notesY, notesWidth, boxHeight, 1.5, 1.5, 'FD');
+  const validityLines = doc.splitTextToSize(`:  ${validityText}`, valColWidth);
+  const schemeLines = doc.splitTextToSize(`:  ${paymentSchemeText}`, valColWidth);
+  const notesLines = notesText ? doc.splitTextToSize(`:  ${notesText}`, valColWidth) : [];
 
-    // Judul Catatan / Pembayaran
+  const totalContentLines = validityLines.length + schemeLines.length + notesLines.length;
+  const boxHeight = 8 + (totalContentLines * 4.2) + (notesLines.length > 0 ? 3 : 2);
+
+  // Cek overflow jika butuh halaman baru
+  if (notesY + boxHeight > pageHeight - 14) {
+    doc.addPage();
+    notesY = 20;
+  }
+
+  // Desain Box Resmi di Sisi Kiri
+  doc.setFillColor(248, 250, 252); // slate-50 lembut
+  doc.setDrawColor(203, 213, 225); // slate-300
+  doc.setLineWidth(0.3);
+  doc.roundedRect(marginLeft, notesY, notesWidth, boxHeight, 1.5, 1.5, 'FD');
+
+  // Judul Box Ketentuan Resmi
+  doc.setFont('times', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(20, 35, 75); // Royal Navy
+  doc.text('KETENTUAN & SYARAT PEMBAYARAN :', marginLeft + 4, notesY + 5.5);
+
+  let curLineY = notesY + 10;
+
+  // 1. Masa Berlaku Penawaran
+  doc.setFont('times', 'bold');
+  doc.setFontSize(8.2);
+  doc.setTextColor(30, 41, 59);
+  doc.text('1. Masa Berlaku', marginLeft + 4, curLineY);
+
+  doc.setFont('times', 'normal');
+  doc.setTextColor(51, 65, 85);
+  doc.text(validityLines, marginLeft + 4 + labelColWidth, curLineY);
+  curLineY += validityLines.length * 4.2;
+
+  // 2. Skema & Termin Pembayaran
+  doc.setFont('times', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('2. Skema Pembayaran', marginLeft + 4, curLineY);
+
+  doc.setFont('times', 'normal');
+  doc.setTextColor(51, 65, 85);
+  doc.text(schemeLines, marginLeft + 4 + labelColWidth, curLineY);
+  curLineY += schemeLines.length * 4.2;
+
+  // 3. Rekening Transfer / Catatan (jika diisi)
+  if (notesLines.length > 0) {
     doc.setFont('times', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 41, 59); // slate-800
-    doc.text('Catatan / Syarat Pembayaran :', marginLeft + 3.5, notesY + 4.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text('3. Rekening Transfer', marginLeft + 4, curLineY);
 
-    // Isi Catatan / Nomor Rekening
     doc.setFont('times', 'normal');
-    doc.setFontSize(8.2);
-    doc.setTextColor(51, 65, 85); // slate-700
-    doc.text(noteLines, marginLeft + 3.5, notesY + 8.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text(notesLines, marginLeft + 4 + labelColWidth, curLineY);
   }
 
   // --- 9. FOOTER RESMI ---
