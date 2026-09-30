@@ -1,0 +1,485 @@
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Quotation } from '../types';
+import { formatIndonesianDate, formatRupiah, generatePdfFileName } from './formatters';
+
+export async function generateQuotationPdf(
+  quotation: Quotation,
+  customFileName?: string
+): Promise<{ doc: jsPDF; fileName: string; blobUrl?: string }> {
+  // A4 dimensions: 210 x 297 mm
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const marginLeft = 15;
+  const marginRight = 15;
+  const contentWidth = pageWidth - marginLeft - marginRight; // 180mm
+
+  const company = quotation.companySnapshot || {};
+
+  // Cursor Y
+  let currentY = 16;
+
+  // --- 1. KOP SURAT PROFESIONAL (RATA TENGAH & TINGGI LOGO SEJAJAR ATAS-BAWAH TEKS) ---
+  const hasLogo = Boolean(company.logoUrl && company.logoUrl.startsWith('data:image'));
+
+  // Hitung baris-baris teks Kop Surat
+  const companyName = (company.name || '').trim().toUpperCase();
+  const addressStr = `${company.address || ''}${company.city ? ', ' + company.city : ''}${company.postalCode ? ' ' + company.postalCode : ''}`.trim();
+
+  const contactsArr: string[] = [];
+  if (company.phone) contactsArr.push(`Telp: ${company.phone}`);
+  if (company.whatsapp) contactsArr.push(`WA: ${company.whatsapp}`);
+  if (company.email) contactsArr.push(`Email: ${company.email}`);
+  if (company.website) contactsArr.push(`Web: ${company.website}`);
+  const contactStr = contactsArr.join('  |  ');
+
+  const npwpStr = company.npwp ? `NPWP: ${company.npwp}` : '';
+
+  // Estimasi lebar maksimal teks kop surat (maksimum 135mm agar rapi berdampingan)
+  const maxAllowedTextWidth = hasLogo ? 135 : contentWidth;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  const addressLines = addressStr ? doc.splitTextToSize(addressStr, maxAllowedTextWidth) : [];
+
+  // Hitung tinggi total blok teks
+  // Header: Nama (6mm) + Spasi (1mm) + Alamat (baris * 3.6mm) + Kontak (3.6mm) + NPWP (3.6mm)
+  let textLinesCount = 0;
+  if (addressLines.length > 0) textLinesCount += addressLines.length;
+  if (contactStr) textLinesCount += 1;
+  if (npwpStr) textLinesCount += 1;
+
+  // Total tinggi teks dari batas atas nama perusahaan sampai batas bawah teks terakhir
+  const nameHeaderHeight = 5.5; // mm
+  const lineHeight = 3.6; // mm
+  const totalTextHeight = nameHeaderHeight + (textLinesCount * lineHeight);
+
+  // Tinggi logo harus sejajar batas atas teks dan batas bawah teks
+  const logoHeight = Math.max(18, Math.min(32, totalTextHeight));
+  const logoWidth = logoHeight; // Proporsional 1:1
+  const gapBetweenLogoAndText = 5; // mm
+
+  // Hitung lebar terpanjang teks untuk memposisikan Kop Surat secara RATA TENGAH
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13.5);
+  const nameWidth = doc.getTextWidth(companyName);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  const contactWidth = contactStr ? doc.getTextWidth(contactStr) : 0;
+  const npwpWidth = npwpStr ? doc.getTextWidth(npwpStr) : 0;
+
+  let calculatedTextWidth = Math.max(nameWidth, contactWidth, npwpWidth, 80);
+  if (addressLines.length > 0) {
+    addressLines.forEach((l: string) => {
+      const w = doc.getTextWidth(l);
+      if (w > calculatedTextWidth) calculatedTextWidth = w;
+    });
+  }
+  calculatedTextWidth = Math.min(calculatedTextWidth, maxAllowedTextWidth);
+
+  // Hitung posisi horizontal gabungan (Logo + Jarak + Teks) agar berada tepat di tengah halaman (RATA TENGAH)
+  const combinedKopWidth = hasLogo ? (logoWidth + gapBetweenLogoAndText + calculatedTextWidth) : calculatedTextWidth;
+  let kopStartX = (pageWidth - combinedKopWidth) / 2;
+  if (kopStartX < marginLeft) kopStartX = marginLeft;
+
+  const kopLogoX = kopStartX;
+  const kopTextX = hasLogo ? (kopStartX + logoWidth + gapBetweenLogoAndText) : kopStartX;
+
+  // Gambar Logo jika ada (sejajar batas atas teks sampai batas bawah teks)
+  if (hasLogo && company.logoUrl) {
+    try {
+      doc.addImage(
+        company.logoUrl,
+        'PNG',
+        kopLogoX,
+        currentY,
+        logoWidth,
+        logoHeight,
+        undefined,
+        'FAST'
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  // Tulis Nama Perusahaan
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13.5);
+  doc.setTextColor(20, 35, 75); // Navy Resmi
+  doc.text(companyName || 'PERUSAHAAN', kopTextX, currentY + 4.5);
+
+  // Tulis Alamat dan Kontak
+  let runningTextY = currentY + 4.5 + lineHeight;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(55, 65, 81);
+
+  if (addressLines.length > 0) {
+    doc.text(addressLines, kopTextX, runningTextY);
+    runningTextY += addressLines.length * lineHeight;
+  }
+
+  if (contactStr) {
+    doc.text(contactStr, kopTextX, runningTextY);
+    runningTextY += lineHeight;
+  }
+
+  if (npwpStr) {
+    doc.text(npwpStr, kopTextX, runningTextY);
+    runningTextY += lineHeight;
+  }
+
+  // Update cursor Y melewati tinggi kop surat
+  currentY = Math.max(currentY + logoHeight, runningTextY) + 3;
+
+  // Garis Pemisah Kop Surat Resmi (Garis Ganda: Tebal 1.2mm + Tipis 0.4mm)
+  doc.setDrawColor(20, 35, 75);
+  doc.setLineWidth(1.2);
+  doc.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+
+  currentY += 1.2;
+  doc.setLineWidth(0.4);
+  doc.line(marginLeft, currentY, pageWidth - marginRight, currentY);
+
+  currentY += 6;
+
+  // --- 2. INFORMASI SURAT & TUJUAN ---
+  const dateFormatted = formatIndonesianDate(quotation.date);
+  const city = company.city || '';
+
+  // Tanggal & Tempat di sisi kanan atas
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  const placeDate = city ? `${city}, ${dateFormatted}` : dateFormatted;
+  doc.text(placeDate, pageWidth - marginRight, currentY, { align: 'right' });
+
+  // Nomor, Lampiran (opsional/bisa diedit ada atau tidaknya), Perihal
+  const metaLabelX = marginLeft;
+  const metaValX = marginLeft + 24;
+
+  doc.text('Nomor', metaLabelX, currentY);
+  doc.text(`:  ${quotation.quotationNumber}`, metaValX, currentY);
+  currentY += 4.5;
+
+  // Lampiran: bisa diedit ada atau tidaknya
+  const showAttachment = quotation.hasAttachment !== false && Boolean(quotation.attachment && quotation.attachment.trim() !== '' && quotation.attachment !== '-');
+  if (showAttachment) {
+    doc.text('Lampiran', metaLabelX, currentY);
+    doc.text(`:  ${quotation.attachment}`, metaValX, currentY);
+    currentY += 4.5;
+  }
+
+  doc.text('Perihal', metaLabelX, currentY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`:  ${quotation.subject || 'Surat Penawaran Harga'}`, metaValX, currentY);
+  doc.setFont('helvetica', 'normal');
+  currentY += 7;
+
+  // Tujuan Surat (Kepada Yth)
+  doc.text('Kepada Yth.', marginLeft, currentY);
+  currentY += 4.5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(quotation.customerCompany || quotation.toRecipient || 'Pimpinan / Management', marginLeft, currentY);
+  currentY += 4.5;
+
+  doc.setFont('helvetica', 'normal');
+  if (quotation.customerPic) {
+    doc.text(`Up. Bapak / Ibu ${quotation.customerPic}`, marginLeft, currentY);
+    currentY += 4.5;
+  }
+
+  if (quotation.customerAddress) {
+    const addrLines = doc.splitTextToSize(quotation.customerAddress, 110);
+    doc.text(addrLines, marginLeft, currentY);
+    currentY += addrLines.length * 4;
+  }
+  currentY += 3;
+
+  // --- 3. ISI SURAT PEMBUKA ---
+  const openingText =
+    quotation.openingText ||
+    'Dengan hormat,\nBersama surat ini kami mengajukan penawaran pekerjaan sesuai kebutuhan yang Bapak/Ibu sampaikan. Adapun rincian penawaran kami sebagai berikut:';
+
+  const openingLines = doc.splitTextToSize(openingText, contentWidth);
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text(openingLines, marginLeft, currentY);
+  currentY += openingLines.length * 4.2 + 3;
+
+  // --- 4. TABEL PENAWARAN ---
+  const tableData = quotation.items.map((item, idx) => [
+    idx + 1,
+    item.description,
+    item.dimension || '-',
+    item.qty,
+    item.unit,
+    formatRupiah(item.price).replace('Rp', '').trim(),
+    formatRupiah(item.total).replace('Rp', '').trim(),
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    margin: { left: marginLeft, right: marginRight },
+    head: [['No', 'Deskripsi Pekerjaan', 'Dimensi / Spesifikasi', 'Qty', 'Satuan', 'Harga (Rp)', 'Total (Rp)']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [30, 64, 175], // Royal Navy Blue (#1e40af)
+      textColor: [255, 255, 255],
+      fontSize: 8.5,
+      fontStyle: 'bold',
+      halign: 'center',
+      valign: 'middle',
+      cellPadding: 2.5,
+    },
+    bodyStyles: {
+      fontSize: 8,
+      cellPadding: 2.2,
+      textColor: [30, 41, 59],
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 10 },
+      1: { halign: 'left', cellWidth: 'auto' },
+      2: { halign: 'center', cellWidth: 26 },
+      3: { halign: 'center', cellWidth: 14 },
+      4: { halign: 'center', cellWidth: 16 },
+      5: { halign: 'right', cellWidth: 28 },
+      6: { halign: 'right', cellWidth: 32 },
+    },
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lastTableInfo = (doc as any).lastAutoTable;
+  currentY = lastTableInfo ? lastTableInfo.finalY + 3 : currentY + 40;
+
+  // Cek overflow jika sisa halaman kurang dari 80mm
+  if (currentY > pageHeight - 85) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // --- 5. RINGKASAN HARGA (Subtotal, Diskon, PPN, Grand Total) ---
+  const summaryBoxWidth = 85;
+  const summaryX = pageWidth - marginRight - summaryBoxWidth;
+
+  doc.setFontSize(8.5);
+
+  // Subtotal
+  doc.setFont('helvetica', 'normal');
+  doc.text('Subtotal', summaryX, currentY);
+  doc.text(formatRupiah(quotation.subtotal), pageWidth - marginRight, currentY, { align: 'right' });
+  currentY += 4.5;
+
+  // Diskon jika ada
+  if (quotation.discountAmount > 0) {
+    const discLabel =
+      quotation.discountType === 'percent'
+        ? `Diskon (${quotation.discountValue}%)`
+        : 'Diskon Khusus';
+    doc.text(discLabel, summaryX, currentY);
+    doc.text(`- ${formatRupiah(quotation.discountAmount)}`, pageWidth - marginRight, currentY, { align: 'right' });
+    currentY += 4.5;
+  }
+
+  // PPN jika ada
+  if (quotation.ppnAmount > 0) {
+    doc.text(`PPN (${quotation.ppnPercent}%)`, summaryX, currentY);
+    doc.text(formatRupiah(quotation.ppnAmount), pageWidth - marginRight, currentY, { align: 'right' });
+    currentY += 4.5;
+  }
+
+  // Grand Total Box
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(summaryX - 2, currentY - 3.5, summaryBoxWidth + 2, 7.5, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 64, 175);
+  doc.text('GRAND TOTAL', summaryX, currentY + 1.2);
+  doc.text(formatRupiah(quotation.grandTotal), pageWidth - marginRight, currentY + 1.2, { align: 'right' });
+
+  currentY += 9;
+
+  // --- 6. KOTAK TERBILANG ---
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(marginLeft, currentY, contentWidth, 8, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Terbilang :', marginLeft + 3, currentY + 5.2);
+
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setTextColor(30, 64, 175);
+  doc.text(`"${quotation.terbilang || 'Nol Rupiah'}"`, marginLeft + 23, currentY + 5.2);
+
+  currentY += 12;
+
+  // Catatan rekening bank (opsional jika diisi)
+  if (quotation.additionalNotes && quotation.additionalNotes.trim()) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Catatan / Pembayaran :', marginLeft, currentY);
+    doc.setFont('helvetica', 'normal');
+    const noteLines = doc.splitTextToSize(quotation.additionalNotes, contentWidth);
+    doc.text(noteLines, marginLeft, currentY + 4);
+    currentY += noteLines.length * 3.8 + 4;
+  }
+
+  // --- 7. TEKS PENUTUP RESMI ---
+  // "Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih."
+  const closingText =
+    quotation.closingText ||
+    'Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih.';
+
+  const closingLines = doc.splitTextToSize(closingText, contentWidth);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text(closingLines, marginLeft, currentY);
+  currentY += closingLines.length * 4.2 + 6;
+
+  // Cek overflow sebelum tanda tangan
+  if (currentY > pageHeight - 55) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  // --- 8. BLOK TANDA TANGAN (KANAN BAWAH) ---
+  const signWidth = 70;
+  const signX = pageWidth - marginRight - signWidth;
+  let signY = currentY;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Hormat Kami,', signX, signY, { align: 'left' });
+  signY += 4.5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text((company.name || '').toUpperCase(), signX, signY, { align: 'left' });
+  signY += 4.5;
+
+  // Stempel & Tanda Tangan
+  const signAreaY = signY;
+  const signAreaHeight = 20;
+
+  if (company.stampUrl && company.stampUrl.startsWith('data:image')) {
+    try {
+      doc.addImage(company.stampUrl, 'PNG', signX + 18, signAreaY, 20, 20, undefined, 'FAST');
+    } catch {
+      // ignore
+    }
+  }
+
+  if (company.signatureUrl && company.signatureUrl.startsWith('data:image')) {
+    try {
+      doc.addImage(company.signatureUrl, 'PNG', signX, signAreaY, 28, signAreaHeight, undefined, 'FAST');
+    } catch {
+      // ignore
+    }
+  }
+
+  signY += signAreaHeight + 2;
+
+  // Nama Direktur & Jabatan (Diambil dari Pengaturan)
+  const directorName = company.directorName || '';
+  const directorTitle = company.directorTitle || 'Direktur';
+
+  if (directorName) {
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(20, 35, 75);
+    doc.text(directorName, signX, signY);
+
+    const nameWidth = doc.getTextWidth(directorName);
+    doc.setDrawColor(20, 35, 75);
+    doc.setLineWidth(0.4);
+    doc.line(signX, signY + 0.8, signX + nameWidth, signY + 0.8);
+
+    signY += 4.5;
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(directorTitle, signX, signY);
+
+  // --- 9. FOOTER RESMI ---
+  const totalPages = doc.getNumberOfPages();
+  const todayFormatted = formatIndonesianDate(new Date().toISOString().slice(0, 10));
+
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+
+    // Watermark jika status khusus
+    if (quotation.status === 'draft') {
+      doc.saveGraphicsState();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(48);
+      doc.setTextColor(226, 232, 240);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (doc as any).text('D R A F T', pageWidth / 2, pageHeight / 2, {
+        align: 'center',
+        angle: 45,
+      });
+      doc.restoreGraphicsState();
+    } else if (quotation.status === 'revisi') {
+      doc.saveGraphicsState();
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(46);
+      doc.setTextColor(254, 226, 226);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (doc as any).text('R E V I S I', pageWidth / 2, pageHeight / 2, {
+        align: 'center',
+        angle: 45,
+      });
+      doc.restoreGraphicsState();
+    }
+
+    // Garis tipis footer
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.line(marginLeft, pageHeight - 12, pageWidth - marginRight, pageHeight - 12);
+
+    // Teks Footer
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+
+    const docRef = `${quotation.quotationNumber}  •  Dicetak: ${todayFormatted}`;
+    doc.text(docRef, marginLeft, pageHeight - 8);
+
+    const pageStr = `Halaman ${i} dari ${totalPages}`;
+    doc.text(pageStr, pageWidth - marginRight, pageHeight - 8, { align: 'right' });
+  }
+
+  const fileName =
+    customFileName ||
+    generatePdfFileName(
+      quotation.customerCompany,
+      quotation.customerPic,
+      quotation.quotationNumber
+    );
+
+  const blobUrl = doc.output('bloburl').toString();
+
+  return { doc, fileName, blobUrl };
+}
