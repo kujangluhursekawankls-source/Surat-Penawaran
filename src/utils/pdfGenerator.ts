@@ -39,17 +39,19 @@ export async function generateQuotationPdf(
   const npwpStr = company.npwp ? `NPWP: ${company.npwp}` : '';
 
   // Hitung baris teks dan kalkulasi tinggi total teks secara presisi
+  const subFontSize = 10.5; // Ukuran diperbesar sedikit sesuai permintaan agar lebih jelas dan tegas
+  const normalLineHeight = 4.6; // mm spasi baris proporsional
+
   doc.setFont('times', 'normal');
-  doc.setFontSize(9.5);
+  doc.setFontSize(subFontSize);
 
   // Batasi lebar baris agar tidak bertabrakan dengan logo di kiri (lebar aman 136mm di tengah halaman)
   const maxCenterTextWidth = 136;
   const addressLines: string[] = addressStr ? doc.splitTextToSize(addressStr, maxCenterTextWidth) : [];
 
   // Hitung posisi Y tiap elemen teks
-  const nameFontSize = 17.5; // Heading formal berwibawa khas kop surat resmi (Times Bold)
-  const nameLineHeight = 7.0; // mm
-  const normalLineHeight = 4.2; // mm
+  const nameFontSize = 18; // Heading formal berwibawa khas kop surat resmi (Times Bold)
+  const nameLineHeight = 7.2; // mm
 
   let textBottomY = kopTopY + nameLineHeight;
   if (addressLines.length > 0) {
@@ -89,10 +91,10 @@ export async function generateQuotationPdf(
   doc.setTextColor(20, 35, 75); // Royal Navy
   doc.text(companyName, centerX, currentTextY, { align: 'center' });
 
-  // Alamat Lengkap (Times Normal, Rata Tengah)
+  // Alamat Lengkap (Times Normal, Rata Tengah - Size Lebih Besar & Jelas)
   doc.setFont('times', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(51, 65, 85);
+  doc.setFontSize(subFontSize);
+  doc.setTextColor(30, 41, 59);
 
   if (addressLines.length > 0) {
     currentTextY += normalLineHeight + 1.2;
@@ -100,7 +102,7 @@ export async function generateQuotationPdf(
     currentTextY += (addressLines.length - 1) * normalLineHeight;
   }
 
-  // Kontak (Telp, WA, Email, Web - Rata Tengah)
+  // Kontak (Telp, WA, Email, Web - Rata Tengah - Size Lebih Besar & Jelas)
   if (contactStr) {
     currentTextY += normalLineHeight;
     doc.text(contactStr, centerX, currentTextY, { align: 'center' });
@@ -189,10 +191,13 @@ export async function generateQuotationPdf(
     quotation.openingText ||
     'Dengan hormat,\nBersama surat ini kami mengajukan penawaran pekerjaan sesuai kebutuhan yang Bapak/Ibu sampaikan. Adapun rincian penawaran kami sebagai berikut:';
 
-  const openingLines = doc.splitTextToSize(openingText, contentWidth);
+  doc.setFont('times', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(30, 41, 59);
-  doc.text(openingLines, marginLeft, currentY);
+
+  const safeOpeningWidth = contentWidth - 4;
+  const openingLines = doc.splitTextToSize(openingText, safeOpeningWidth);
+  doc.text(openingLines, marginLeft, currentY, { maxWidth: safeOpeningWidth, align: 'left' });
   currentY += openingLines.length * 4.4 + 3;
 
   // --- 4. TABEL PENAWARAN ---
@@ -320,11 +325,15 @@ export async function generateQuotationPdf(
     quotation.closingText ||
     'Demikian surat penawaran ini kami sampaikan. Besar harapan kami untuk dapat bekerjasama dengan perusahaan Bapak/Ibu. Atas perhatian dan kesempatannya kami ucapkan terima kasih.';
 
-  const closingLines = doc.splitTextToSize(closingText, contentWidth);
+  // Tentukan font dan ukuran DULU sebelum splitTextToSize agar kalkulasi lebar presisi
   doc.setFont('times', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(30, 41, 59);
-  doc.text(closingLines, marginLeft, currentY);
+
+  // Gunakan safe width dalam batas margin agar tidak melewati batas kanan
+  const safeContentWidth = contentWidth - 4;
+  const closingLines = doc.splitTextToSize(closingText, safeContentWidth);
+  doc.text(closingLines, marginLeft, currentY, { maxWidth: safeContentWidth, align: 'left' });
   currentY += closingLines.length * 4.4 + 5;
 
   // Cek overflow sebelum tanda tangan

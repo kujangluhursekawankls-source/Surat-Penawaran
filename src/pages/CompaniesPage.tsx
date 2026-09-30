@@ -190,19 +190,19 @@ export const CompaniesPage: React.FC = () => {
                     <h3 className="text-base sm:text-xl font-bold text-slate-900 tracking-wide uppercase leading-tight">
                       {comp.name || 'NAMA PERUSAHAAN'}
                     </h3>
-                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                    <p className="text-xs text-slate-700 mt-1 leading-relaxed">
                       {comp.address}
                       {comp.city ? `, ${comp.city}` : ''}
                       {comp.postalCode ? ` ${comp.postalCode}` : ''}
                     </p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500 mt-1 font-medium">
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-600 mt-1 font-medium">
                       {comp.phone && <span>Telp: {comp.phone}</span>}
                       {comp.whatsapp && <span>WA: {comp.whatsapp}</span>}
                       {comp.email && <span>Email: {comp.email}</span>}
                       {comp.website && <span>Web: {comp.website}</span>}
                     </div>
                     {comp.npwp && (
-                      <p className="text-[10px] text-slate-600 font-semibold mt-0.5">
+                      <p className="text-[11px] text-slate-700 font-semibold mt-0.5">
                         NPWP: {comp.npwp}
                       </p>
                     )}
